@@ -121,15 +121,18 @@ class condor_object:
 
             self.net.columns = ["V1", "V2", "weight"]
             # Creates iGraph object from the DataFrame.
-            self.graph = Graph.DataFrame(self.net, directed=False)
+            self.graph = Graph.DataFrame(self.net, directed=False, use_vids=False)
+            # from igraph 0.10 add parameter: use_vids=False
 
             self.reg_names = sorted(set(self.net.iloc[:, 0]))
             self.tar_names = sorted(set(self.net.iloc[:, 1]))
 
             # By construction of the graph object, and the fact that reg_ is sorted in front of tar_
             # we have that the graph nodes are sorted by first the reg nodes and then the tar nodes.
-            types = [0] * len(self.reg_names)
-            types.extend([1] * len(self.tar_names))
+            #types = [0] * len(self.reg_names)
+            #types.extend([1] * len(self.tar_names))
+            types = [0 if self.graph.vs[i]['name'].startswith('reg') else 1 for i in range(len(self.graph.vs))]
+            
             self.graph.vs["type"] = types
 
             # Dictionary to keep track of node indices and node names should they be rearranged.
@@ -156,6 +159,8 @@ class condor_object:
                 Whether to apply the initial community structure on the bipartite network
                 disregarding the bipartite structure or apply it to the unipartite network resulting from the projection onto
                 one of these nodes.
+            resolution: float
+                Resolution parameter for the modularity matrix.
         Outputs:
             self     : updates condor object with
                      tar_memb: DataFrame of initial target node membership.
@@ -263,13 +268,15 @@ class condor_object:
         self.modularity = Q
         return Q
 
-    def matrices(self, c,resolution):
+    def matrices(self, c, resolution):
         """ Computation of modularity matrix and initial community matrix.
 
         Parameters
         ------------
             c        : int
                 max number of communities.
+            resolution: float
+                Resolution parameter for the modularity matrix.
         Returns
         ----------
             B        : array
@@ -343,6 +350,7 @@ class condor_object:
             c        : int
                 max number of communities.
             resolution: float
+                Resolution parameter for modularity.
                 
         
         Notes
@@ -404,21 +412,30 @@ class condor_object:
         self.tar_memb.columns = ["tar", "community"]
         self.reg_memb.columns = ["reg", "community"]
 
-    def qscores(self):
+    def qscores(self, c= "def", resolution=1):
         """
             Computes the qscores (contribution of a vertex to its community modularity)
             for each vertex in the network.
+
+            Parameters
+            ------------
+                c: int             
+                    max number of communities.
+                resolution: float
+                    Resolution parameter for the modularity matrix.
         """
 
-        c = 1 + max(self.reg_memb["com"])
-        B, m, T, R, gn, rg = self.matrices(c)
+        if c == "def":
+            c = int(len(self.tar_memb["community"].unique()) * 1.2)
+        
+        B, m, T, R, gn, rg = self.matrices(c, resolution)
         self.Qscores = {"reg_qscores": None, "tar_qscores": None}
 
         # Qscores for the targets:
         Rq = B.dot(R) / (2 * m)
         Qj = list()
         for j, r in self.tar_memb.iterrows():
-            Qjh = Rq[j, r["com"]] / self.Qcoms[r["com"]]
+            Qjh = Rq[j, r["community"]] / self.Qcoms[r["community"]]
             Qj.append(Qjh)
         self.Qscores["tar_qscores"] = self.tar_memb.copy()
         self.Qscores["tar_qscores"]["qscore"] = Qj
@@ -427,7 +444,7 @@ class condor_object:
         Tq = T.transpose().dot(B) / (2 * m)
         Qi = list()
         for i, r in self.reg_memb.iterrows():
-            Qih = Tq[r["com"], i] / self.Qcoms[r["com"]]
+            Qih = Tq[r["community"], i] / self.Qcoms[r["community"]]
             Qi.append(Qih)
         self.Qscores["reg_qscores"] = self.reg_memb.copy()
         self.Qscores["reg_qscores"]["qscore"] = Qi
@@ -472,8 +489,8 @@ def run_condor(
             Max number of communities. It is recomended to leave this to default, otherwise if the initial community assignement is bigger the program will crash.
         deltaQmin: float
             Difference modularity threshold for stopping the iterative process.
-        resolution: int
-            Not yet implemented.
+        resolution: float
+            Resolution parameter for modularity.
         return_output:  bool
             Whether the function returns the created condor object.
         tar_output: str
@@ -488,7 +505,9 @@ def run_condor(
     """
 
     co = condor_object(network_file, sep, index_col, header,dataframe=None,silent=silent)
+
     co.initial_community(method=initial_method, project=initial_project,resolution=resolution)
+
 
     co.brim(deltaQmin, c=com_num, resolution=resolution)
     co.tar_memb.to_csv(tar_output)
