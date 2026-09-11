@@ -266,6 +266,7 @@ class condor_object:
         Qcoms = (1 / m) * (np.diagonal(RtBT))
         Q = sum(Qcoms)
         self.Qcoms = Qcoms[Qcoms > 0]
+        # creating a lookup because the filtering was introducing an indexing error when computing the qscores.
         self.Qcol_lookup = dict(zip(np.flatnonzero(Qcoms > 0), self.Qcoms))
         self.modularity = Q
         return Q
@@ -409,7 +410,7 @@ class condor_object:
             list(zip(list(gn), [T0[i, :].argmax() for i in range(0, len(gn))]))
         )
         self.reg_memb = pd.DataFrame(
-            list(zip(list(rg), [R0[i, :].argmax() for i in range(0, len(rg))]))
+            list(zip(list(rg), [R[i, :].argmax() for i in range(0, len(rg))])) 
         )
         self.tar_memb.columns = ["tar", "community"]
         self.reg_memb.columns = ["reg", "community"]
