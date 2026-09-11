@@ -143,6 +143,7 @@ class condor_object:
             self.reg_memb = None
             self.tar_memb = None
             self.Qcoms = None
+            self.Qcol_lookup = None
 
     def initial_community(self, method="LDN", project=False,resolution=1):
         """
@@ -265,6 +266,7 @@ class condor_object:
         Qcoms = (1 / m) * (np.diagonal(RtBT))
         Q = sum(Qcoms)
         self.Qcoms = Qcoms[Qcoms > 0]
+        self.Qcol_lookup = dict(zip(np.flatnonzero(Qcoms > 0), self.Qcoms))
         self.modularity = Q
         return Q
 
@@ -435,7 +437,7 @@ class condor_object:
         Rq = B.dot(R) / (2 * m)
         Qj = list()
         for j, r in self.tar_memb.iterrows():
-            Qjh = Rq[j, r["community"]] / self.Qcoms[r["community"]]
+            Qjh = Rq[j, r["community"]] / self.Qcol_lookup[r["community"]]
             Qj.append(Qjh)
         self.Qscores["tar_qscores"] = self.tar_memb.copy()
         self.Qscores["tar_qscores"]["qscore"] = Qj
@@ -444,7 +446,7 @@ class condor_object:
         Tq = T.transpose().dot(B) / (2 * m)
         Qi = list()
         for i, r in self.reg_memb.iterrows():
-            Qih = Tq[r["community"], i] / self.Qcoms[r["community"]]
+            Qih = Tq[r["community"], i] / self.Qcol_lookup[r["community"]]
             Qi.append(Qih)
         self.Qscores["reg_qscores"] = self.reg_memb.copy()
         self.Qscores["reg_qscores"]["qscore"] = Qi
