@@ -419,6 +419,8 @@ class condor_object:
         """
             Computes the qscores (contribution of a vertex to its community modularity)
             for each vertex in the network.
+            Communities containing only targets or only regulators receive NaN
+            because their normalized modularity contribution is undefined.
 
             Parameters
             ------------
@@ -433,11 +435,16 @@ class condor_object:
         
         B, m, T, R, gn, rg = self.matrices(c, resolution)
         self.Qscores = {"reg_qscores": None, "tar_qscores": None}
+        tar_communities = set(self.tar_memb["community"])
+        reg_communities = set(self.reg_memb["community"])
 
         # Qscores for the targets:
         Rq = B.dot(R) / (2 * m)
         Qj = list()
         for j, r in self.tar_memb.iterrows():
+            if r["community"] not in reg_communities:
+                Qj.append(np.nan)
+                continue
             Qjh = Rq[j, r["community"]] / self.Qcol_lookup[r["community"]]
             Qj.append(Qjh)
         self.Qscores["tar_qscores"] = self.tar_memb.copy()
@@ -447,6 +454,9 @@ class condor_object:
         Tq = T.transpose().dot(B) / (2 * m)
         Qi = list()
         for i, r in self.reg_memb.iterrows():
+            if r["community"] not in tar_communities:
+                Qi.append(np.nan)
+                continue
             Qih = Tq[r["community"], i] / self.Qcol_lookup[r["community"]]
             Qi.append(Qih)
         self.Qscores["reg_qscores"] = self.reg_memb.copy()
